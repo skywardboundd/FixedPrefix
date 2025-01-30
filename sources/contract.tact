@@ -54,13 +54,55 @@ fun mySend(params: SendParameters): Int { // returns forward fee
     return nativeSendMessageReturnForwardFee(c, params.mode);
 }
 
+asm fun mySend2(params: SendParameters): Int {
+    NOP
+    3 4 BLKSWAP
+    s2 XCHG0
+    NEWC
+    b{01} STSLICECONST
+    1 STI
+    b{000} STSLICECONST
+    STSLICE
+    SWAP
+    STGRAMS
+    105 PUSHINT
+    STZEROES
+    s2 XCHG0
+    DUP2
+    ISNULL
+    SWAP
+    ISNULL
+    MUL
+    <{
+        DROP2
+        PUSHNULL
+        SWAP
+    }> PUSHCONT
+    <{
+        NEWC
+        b{00} STSLICECONST
+        STDICT
+        STDICT
+        b{0} STSLICECONST
+        ENDC
+        SWAP
+        b{1} STSLICECONST
+    }> PUSHCONT
+    IFELSE
+    STDICT
+    STDICT
+    ENDC
+    SWAP
+    SENDMSG
+}
+
 message Test {
     any: Int;
 }
 contract SampleTactContract {
     receive(msg: Test) {
         dump(6);
-        mySend(SendParameters{
+        mySend2(SendParameters{
             bounce: true,
             to: myAddress(),
             value: 44,
@@ -71,4 +113,11 @@ contract SampleTactContract {
         });
     }
 }
-
+//
+//bounce: true,
+//to: myAddress(),
+//value: 44,
+//mode: 64,
+//body: "TEST".asComment(),
+//code: emptyCell(),
+//data: emptyCell()

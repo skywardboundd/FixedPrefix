@@ -14,7 +14,7 @@ describe("contract", () => {
         }
         let system = await Blockchain.create();
 
-        let owner = await system.treasury("owner");
+        let owner = await system.treasury("deployer");
         let nonOwner = await system.treasury("non-owner");
 
         let contract = system.openContract(await SampleTactContract.fromInit());
