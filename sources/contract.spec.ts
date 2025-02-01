@@ -1,8 +1,9 @@
-import { toNano } from "@ton/core";
+import { beginCell, toNano } from "@ton/core";
 import { Blockchain } from "@ton/sandbox";
 import "@ton/test-utils";
 import { SampleTactContract } from "./output/sample_SampleTactContract";
 import { findErrorCodeByMessage } from './utils/error';
+import { flattenTransaction } from "@ton/test-utils";
 
 describe("contract", () => {
     it("should deploy correctly", async () => {
@@ -18,16 +19,33 @@ describe("contract", () => {
         let nonOwner = await system.treasury("non-owner");
 
         let contract = system.openContract(await SampleTactContract.fromInit());
-        const deployResult = await contract.send(owner.getSender(), { value: toNano(1) }, { $$type: "Test", any: 0n});
+        const slice = beginCell().storeUint(0, 32).asSlice();
+        await contract.send(owner.getSender(), { value: toNano(1), bounce: false }, slice);
+
+        const balanceBefore = await (await system.getContract(contract.address)).balance;
+        const deployResult = await contract.send(owner.getSender(), { value: toNano(1.7) }, slice);
+        const balanceAfter = await (await system.getContract(contract.address)).balance;
         expect(deployResult.transactions).toHaveTransaction({
             from: owner.address,
             to: contract.address,
-            deploy: true,
             success: true,
         });
+        expect(deployResult.transactions).toHaveTransaction({
+            from: contract.address,
+            to: owner.address,
+            value: toNano(1),
+        })
+        expect(deployResult.transactions).toHaveTransaction({
+            from: contract.address,
+            to: owner.address,
+            value: (value) => { return value != undefined && value > toNano(0.5) }
+        })
+        expect(balanceAfter).toEqual(balanceAfter);
+        console.warn(balanceBefore);
+        console.warn(balanceAfter);
 
-
-        //system.verbosity.vmLogs = "vm_logs";
-        // Check counter
+        console.log(flattenTransaction(deployResult.transactions[1]));
+        console.log(flattenTransaction(deployResult.transactions[2]));
+        console.log(flattenTransaction(deployResult.transactions[3]));
     });
 });

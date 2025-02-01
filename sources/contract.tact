@@ -1,123 +1,48 @@
-import "@stdlib/deploy";
-
-asm fun zero() { NOP }
-
-fun mySend(params: SendParameters): Int { // returns forward fee
-    zero();
-    let b: Builder = beginCell();
-    b = b.storeInt(1, 2); // internal_message + ihd_disabled
-    b = b.storeBool(params.bounce); // bounce
-    b = b.storeInt(0, 3); // bounced + from
-    b = b.storeAddress(params.to); // To
-    b = b.storeCoins(params.value); // Value
-    b = b.storeInt(0, 1 + 4 + 4 + 64 + 32); // currency_collection + IHR fees + Fwd fees + CreatedLT + CreatedAt
-
-    // Stateinit
-    if (params.code != null || params.data != null) {
-        b = b.storeBool(true); // State init
-
-        // Assemble state init cell
-        let bc: Builder = beginCell();
-        bc = bc.storeBool(false); // SplitDepth
-        bc = bc.storeBool(false); // TickTock
-        if (params.code != null) {
-            bc = bc.storeBool(true); // Code presence
-            bc = bc.storeRef(params.code!!);
-        } else {
-            bc = bc.storeBool(false); // Code presence
-        }
-        if (params.data != null) {
-            bc = bc.storeBool(true); // Data presence
-            bc = bc.storeRef(params.data!!);
-        } else {
-            bc = bc.storeBool(false); // Data presence
-        }
-        bc = bc.storeBool(false); // Library
-
-        b = b.storeBool(true); // Store as ref
-        b = b.storeRef(bc.endCell());
-    } else {
-        b = b.storeBool(false); // No state init
-    }
-
-    // Body
-    let body: Cell? = params.body;
-    if (body != null) {
-        b = b.storeBool(true);
-        b = b.storeRef(body!!);
-    } else {
-        b = b.storeBool(false); // No body
-    }
-
-    // Send
-    let c: Cell = b.endCell();
-    return nativeSendMessageReturnForwardFee(c, params.mode);
-}
-
-asm fun mySend2(params: SendParameters): Int {
-    NOP
-    3 4 BLKSWAP
-    s2 XCHG0
-    NEWC
-    b{01} STSLICECONST
-    1 STI
-    b{000} STSLICECONST
-    STSLICE
-    SWAP
-    STGRAMS
-    105 PUSHINT
-    STZEROES
-    s2 XCHG0
-    DUP2
-    ISNULL
-    SWAP
-    ISNULL
-    MUL
-    <{
-        DROP2
-        PUSHNULL
-        SWAP
-    }> PUSHCONT
-    <{
-        NEWC
-        b{00} STSLICECONST
-        STDICT
-        STDICT
-        b{0} STSLICECONST
-        ENDC
-        SWAP
-        b{1} STSLICECONST
-    }> PUSHCONT
-    IFELSE
-    STDICT
-    STDICT
-    ENDC
-    SWAP
-    SENDMSG
-}
-
-message Test {
-    any: Int;
-}
 contract SampleTactContract {
-    receive(msg: Test) {
-        dump(6);
-        mySend2(SendParameters{
-            bounce: true,
-            to: myAddress(),
-            value: 44,
-            mode: 64,
-            body: "TEST".asComment(),
-            code: emptyCell(),
-            data: emptyCell()
+    const firstMsgValue: Int = ton("1");
+    const firstMsgFwdFee: Int = ton("0.1"); // This can be constant
+    //Or, if the outcoming message is quite same that the incoming one, you can use Context().readForwardFee
+    //Or, if the outcoming message differs from incoming one, you can estimate the forwardFee using
+    // getForwardFee(). Number of cells and bits may be obtained using caclucateDataSize().
+
+    const totalGasFees: Int = ton("0.1"); // This value may be found using tests.
+
+    const minimalSecondMsgValue: Int = ton("0.5");
+
+    receive(msg: Slice) {
+        // We had 1 TON on balance before this message
+        // Message has 2 TONs
+        // We want to send first message, containing self.firstMsgValue TONs
+        // And the second one, containing "RemainingMsgValue" TONs.
+        
+        // Here you should check, is that possible or not
+        let msgValue = context().value;
+        require(msgValue >= self.firstMsgFwdFee + self.totalGasFees + self.firstMsgValue + self.minimalSecondMsgValue, "Not enough value");
+
+        send(SendParameters{
+            to: sender(), // You can choose any address you want
+            bounce: false, // And set, whether you want your message to be bounceable
+            value: self.firstMsgValue,
+            mode: SendPayGasSeparately, // You can also use SendDefaultMode here, it depends on your needs. But don't forget to correct the code below
+            body: "First".asComment()
         });
+        
+        let myBalanceBeforeMsg = myBalance() - msgValue;
+
+                                        // ↓ This is needed only if you use SendPayGasSeparately above
+        let remainingValue = msgValue - self.firstMsgFwdFee - self.firstMsgValue;
+        
+        nativeReserve(myBalanceBeforeMsg, ReserveAtMost); // You will not fail, if you can't reserve needed amount
+
+        send(SendParameters{
+            to: sender(), // You can choose any address you want
+            bounce: false, // And set, whether you want your message to be bounceable
+            value: 0,
+            mode: SendRemainingBalance + SendIgnoreErrors, // Actually, if your require() is correct, you should not fail here, so SendIgnore errors is unessesary 
+            body: "Second".asComment()
+        })
     }
+
+    // Similar, real-world example can be found here: https://github.com/EmelyanenkoK/modern_jetton/blob/master/contracts/jetton-wallet.func#L149
+    // Check, if you are an advanced user
 }
-//
-//bounce: true,
-//to: myAddress(),
-//value: 44,
-//mode: 64,
-//body: "TEST".asComment(),
-//code: emptyCell(),
-//data: emptyCell()
