@@ -1,48 +1,94 @@
-contract SampleTactContract {
-    const firstMsgValue: Int = ton("1");
-    const firstMsgFwdFee: Int = ton("0.1"); // This can be constant
-    //Or, if the outcoming message is quite same that the incoming one, you can use Context().readForwardFee
-    //Or, if the outcoming message differs from incoming one, you can estimate the forwardFee using
-    // getForwardFee(). Number of cells and bits may be obtained using caclucateDataSize().
+message Test {}
 
-    const totalGasFees: Int = ton("0.1"); // This value may be found using tests.
+contract Parent() {
+    receive() {}
 
-    const minimalSecondMsgValue: Int = ton("0.5");
+    receive(msg: Test) {
+        let child = initOf Child(myAddress());
+        if(child.hasSameBasechainAddress(sender())) {
+            message(MessageParameters{
+                value: 0,
+                mode: SendRemainingValue,
+                bounce: false,
+                to: address("UQBAmIBdInKmGzdTUMay9fqq8nyCZ9jnUh_yBFEE_cfediVD")
+            })
+        }
+    }
+}
 
-    receive(msg: Slice) {
-        // We had 1 TON on balance before this message
-        // Message has 2 TONs
-        // We want to send first message, containing self.firstMsgValue TONs
-        // And the second one, containing "RemainingMsgValue" TONs.
-        
-        // Here you should check, is that possible or not
-        let msgValue = context().value;
-        require(msgValue >= self.firstMsgFwdFee + self.totalGasFees + self.firstMsgValue + self.minimalSecondMsgValue, "Not enough value");
-
-        send(SendParameters{
-            to: sender(), // You can choose any address you want
-            bounce: false, // And set, whether you want your message to be bounceable
-            value: self.firstMsgValue,
-            mode: SendPayGasSeparately, // You can also use SendDefaultMode here, it depends on your needs. But don't forget to correct the code below
-            body: "First".asComment()
-        });
-        
-        let myBalanceBeforeMsg = myBalance() - msgValue;
-
-                                        // ↓ This is needed only if you use SendPayGasSeparately above
-        let remainingValue = msgValue - self.firstMsgFwdFee - self.firstMsgValue;
-        
-        nativeReserve(myBalanceBeforeMsg, ReserveAtMost); // You will not fail, if you can't reserve needed amount
-
-        send(SendParameters{
-            to: sender(), // You can choose any address you want
-            bounce: false, // And set, whether you want your message to be bounceable
+contract Child(
+    parent: Address,
+) {
+    receive() {
+        message(MessageParameters{
             value: 0,
-            mode: SendRemainingBalance + SendIgnoreErrors, // Actually, if your require() is correct, you should not fail here, so SendIgnore errors is unessesary 
-            body: "Second".asComment()
+            mode: SendRemainingValue,
+            to: self.parent,
+            body: Test{}.toCell()
         })
     }
-
-    // Similar, real-world example can be found here: https://github.com/EmelyanenkoK/modern_jetton/blob/master/contracts/jetton-wallet.func#L149
-    // Check, if you are an advanced user
 }
+
+
+contract OptimizedParent() {
+    receive() {}
+
+    receive(msg: Test) {
+        let childStateInitHash = stateInitHash(
+            8837433075070783714194111561300892132251148393381834971083367764220177136600, 
+            1, 
+            beginCell().storeAddress(myAddress()).endCell()
+        );
+        if(childStateInitHash == parseStdAddress(sender().asSlice()).address) {
+            message(MessageParameters{
+                value: 0,
+                mode: SendRemainingValue,
+                to: address("UQBAmIBdInKmGzdTUMay9fqq8nyCZ9jnUh_yBFEE_cfediVD")
+            });
+        }
+    }
+}
+
+asm fun stateInitHash(codeHash: Int, codeDepth: Int, data: Cell): Int {
+    // Group 1: Computations and arrangements
+    s0 PUSH HASHCU // `data` hash
+    SWAP CDEPTH // `data` depth
+    SWAP2
+    s1 s2 XCHG
+
+    131380 PUSHINT     // (2 << 16) | (1 << 8) | 0x34
+
+    // Group 2: Composition of the Builder
+    NEWC
+    24 STU  // store refs_descriptor | bits_descriptor | data
+    16 STU  // store depth_descriptor for `code`
+    16 STU  // store depth_descriptor for `data`
+    256 STU // store `code` hash
+    256 STU // store `data` hash
+
+    // Group 3: SHA256 hash of the resulting Builder
+    ONE HASHEXT_SHA256
+}
+
+asm fun contractHashOld(code: Cell, data: Cell): Int {
+    // Group 1: Computations and arrangements
+    s0 PUSH HASHCU // `data` hash
+    s2 PUSH HASHCU // `code` hash
+    SWAP2
+    CDEPTH         // `data` depth
+    SWAP
+    CDEPTH         // `code` depth
+    131380 PUSHINT     // (2 << 16) | (1 << 8) | 0x34
+
+    // Group 2: Composition of the Builder
+    NEWC
+    24 STU  // store refs_descriptor | bits_descriptor | data
+    16 STU  // store depth_descriptor for `code`
+    16 STU  // store depth_descriptor for `data`
+    256 STU // store `code` hash
+    256 STU // store `data` hash
+
+    // Group 3: SHA256 hash of the resulting Builder
+    ONE HASHEXT_SHA256
+}
+

@@ -6,11 +6,14 @@
         "mode": "full",
         "options": {
             "external": false,
-            "debug": false,
+            "debug": true,
             "ipfsAbiGetter": false,
             "interfacesGetter": false,
             "experimental": {
                 "inline": false
+            },
+            "optimizations": {
+                "internalExternalReceiversOutsideMethodsMap": false
             }
         }
     }]
