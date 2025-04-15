@@ -69,26 +69,3 @@ asm fun stateInitHash(codeHash: Int, codeDepth: Int, data: Cell): Int {
     // Group 3: SHA256 hash of the resulting Builder
     ONE HASHEXT_SHA256
 }
-
-asm fun contractHashOld(code: Cell, data: Cell): Int {
-    // Group 1: Computations and arrangements
-    s0 PUSH HASHCU // `data` hash
-    s2 PUSH HASHCU // `code` hash
-    SWAP2
-    CDEPTH         // `data` depth
-    SWAP
-    CDEPTH         // `code` depth
-    131380 PUSHINT     // (2 << 16) | (1 << 8) | 0x34
-
-    // Group 2: Composition of the Builder
-    NEWC
-    24 STU  // store refs_descriptor | bits_descriptor | data
-    16 STU  // store depth_descriptor for `code`
-    16 STU  // store depth_descriptor for `data`
-    256 STU // store `code` hash
-    256 STU // store `data` hash
-
-    // Group 3: SHA256 hash of the resulting Builder
-    ONE HASHEXT_SHA256
-}
-
