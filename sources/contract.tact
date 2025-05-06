@@ -1,71 +1,51 @@
-message Test {}
 
-contract Parent() {
+message(0x112274a7) DeployChildShardA{}
+
+message(0x65f969ba) DeployChildShardB{}
+
+contract Test {
+    receive(_: DeployChildShardA) {
+        let realStateInit = initOf Child();
+
+        let origStateInit = beginCell()
+        .storeUint(0, 3)
+        .storeRef(realStateInit.code)
+        .storeRef(realStateInit.data)
+        .endCell();
+
+        let newStateInit = beginCell()
+        .storeUint(1, 1)
+        .storeUint(8, 5)
+        .storeUint(0, 1)
+        .storeMaybeRef(realStateInit.code)
+        .storeMaybeRef(realStateInit.data)
+        .storeUint(0, 1)
+        .endCell();
+
+        let expectedAddr = beginCell().storeUint(4, 3).storeUint(0, 8).storeUint(newStateInit.hash(), 256).asSlice();
+        let parsedAddr = parseStdAddress(expectedAddr);
+        let realAddr = beginCell()
+        .storeUint(4, 3)
+        .storeUint(parsedAddr.workchain, 8)
+        .storeUint(parsedAddr.address & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 256) // First 32 bits of address will be 0
+        .asSlice();
+
+
+        let msg = beginCell()
+            .storeUint(0x10, 6)
+            .storeSlice(realAddr)
+            .storeCoins(0)
+            .storeUint(4 + 2, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+            .storeRef(newStateInit)
+            .endCell();
+
+        sendRawMessage(msg, SendRemainingValue);
+    }
+}
+
+contract Child() {
     receive() {}
-
-    receive(msg: Test) {
-        let child = initOf Child(myAddress());
-        if(child.hasSameBasechainAddress(sender())) {
-            message(MessageParameters{
-                value: 0,
-                mode: SendRemainingValue,
-                bounce: false,
-                to: address("UQBAmIBdInKmGzdTUMay9fqq8nyCZ9jnUh_yBFEE_cfediVD")
-            })
-        }
+    get fun myAddr(): Address {
+        return myAddress();
     }
-}
-
-contract Child(
-    parent: Address,
-) {
-    receive() {
-        message(MessageParameters{
-            value: 0,
-            mode: SendRemainingValue,
-            to: self.parent,
-            body: Test{}.toCell()
-        })
-    }
-}
-
-
-contract OptimizedParent() {
-    receive() {}
-
-    receive(msg: Test) {
-        let childStateInitHash = stateInitHash(
-            8837433075070783714194111561300892132251148393381834971083367764220177136600, 
-            1, 
-            beginCell().storeAddress(myAddress()).endCell()
-        );
-        if(childStateInitHash == parseStdAddress(sender().asSlice()).address) {
-            message(MessageParameters{
-                value: 0,
-                mode: SendRemainingValue,
-                to: address("UQBAmIBdInKmGzdTUMay9fqq8nyCZ9jnUh_yBFEE_cfediVD")
-            });
-        }
-    }
-}
-
-asm fun stateInitHash(codeHash: Int, codeDepth: Int, data: Cell): Int {
-    // Group 1: Computations and arrangements
-    s0 PUSH HASHCU // `data` hash
-    SWAP CDEPTH // `data` depth
-    SWAP2
-    s1 s2 XCHG
-
-    131380 PUSHINT     // (2 << 16) | (1 << 8) | 0x34
-
-    // Group 2: Composition of the Builder
-    NEWC
-    24 STU  // store refs_descriptor | bits_descriptor | data
-    16 STU  // store depth_descriptor for `code`
-    16 STU  // store depth_descriptor for `data`
-    256 STU // store `code` hash
-    256 STU // store `data` hash
-
-    // Group 3: SHA256 hash of the resulting Builder
-    ONE HASHEXT_SHA256
 }
