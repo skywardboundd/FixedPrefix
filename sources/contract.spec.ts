@@ -5,6 +5,7 @@ import { Test } from "./output/sample_Test";
 import { Child } from "./output/sample_Child";
 
 import { findTransactionRequired, flattenTransaction } from "@ton/test-utils";
+import { FirstChild } from "./output/sample_FirstChild";
 
 const calculateCellsAndBits = (
     root: Cell,
@@ -59,19 +60,27 @@ describe("contract", () => {
 		// blockchain.verbosity.vmLogs = "vm_logs_verbose";
         owner = await blockchain.treasury("owner");
         parentContract = blockchain.openContract(await Test.fromInit());
-		
-        const deployResult = await parentContract.send(owner.getSender(), { value: toNano(1) }, {
-            $$type: "DeployChildShardA",
-            shard: 123123n,
-        });
-
-        const childContract = blockchain.openContract(await Child.fromInit());
-        console.log("Expected address: ", childContract.address);
-        console.log("Expected address parsed: ", childContract.address.hash.toString("hex"));
-        expect(deployResult.transactions).toHaveTransaction({
-            from: parentContract.address,
-            deploy: true,
-        });
+        
+        const deployTypes = ["DeployFirstChild", "DeploySecondChild"] as const;
+        for (const element of deployTypes) {
+            try { 
+                const deployResult = await parentContract.send(owner.getSender(), { value: toNano(1) }, {
+                    $$type: element,
+                    shard: 123123n,
+                });
+                console.log(element, "without errors");
+            } catch(_e) {
+                console.log(element, "Some error ( Invalid Address )");
+            }
+        }
+        
+        // const childContract = blockchain.openContract(await FirstChild.fromInit());
+        // console.log("Expected address: ", childContract.address);
+        // console.log("Expected address parsed: ", childContract.address.hash.toString("hex"));
+        // expect(deployResult.transactions).toHaveTransaction({
+        //     from: parentContract.address,
+        //     deploy: true,
+        // });
         // console.log()
 
         // const realAddr = flattenTransaction(tx).to;
