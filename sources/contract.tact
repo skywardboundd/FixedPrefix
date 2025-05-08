@@ -1,37 +1,44 @@
+message(0x112274a7) DeployChildShardA {
+    shard: Int as uint30;
+}
 
-message(0x112274a7) DeployChildShardA{}
-
-message(0x65f969ba) DeployChildShardB{}
+message(0x65f969ba) DeployChildShardB {}
 
 contract Test {
-    receive(_: DeployChildShardA) {
+    receive(msg: DeployChildShardA) {
         let realStateInit = initOf Child();
 
         let origStateInit = beginCell()
-        .storeUint(0, 3)
-        .storeRef(realStateInit.code)
-        .storeRef(realStateInit.data)
-        .endCell();
+            .storeUint(0, 3)
+            .storeRef(realStateInit.code)
+            .storeRef(realStateInit.data)
+            .endCell();
 
+        let prefix_length = 30;
         let newStateInit = beginCell()
-        .storeUint(1, 1)
-        .storeUint(8, 5)
-        .storeUint(0, 1)
-        .storeMaybeRef(realStateInit.code)
-        .storeMaybeRef(realStateInit.data)
-        .storeUint(0, 1)
-        .endCell();
+            .storeUint(1, 1)
+            .storeUint(prefix_length, 5)
+            .storeUint(0, 1)
+            .storeMaybeRef(realStateInit.code)
+            .storeMaybeRef(realStateInit.data)
+            .storeUint(0, 1)
+            .endCell();
 
-        let expectedAddr = beginCell().storeUint(4, 3).storeUint(0, 8).storeUint(newStateInit.hash(), 256).asSlice();
+
+        let expectedAddr = beginCell()
+            .storeUint(4, 3)
+            .storeUint(0, 8)
+            .storeUint((newStateInit.hash() & ((1 << (256 - prefix_length)) - 1)) | (msg.shard << (256 - prefix_length)), 256)
+            .asSlice();
+
         let parsedAddr = parseStdAddress(expectedAddr);
         let realAddr = beginCell()
-        .storeUint(4, 3)
-        .storeUint(parsedAddr.workchain, 8)
-        .storeUint(parsedAddr.address & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 256) // First 32 bits of address will be 0
-        .asSlice();
+            .storeUint(4, 3)
+            .storeUint(parsedAddr.workchain, 8)
+            .storeUint(parsedAddr.address, 256)
+            .asSlice();
 
-
-        let msg = beginCell()
+        let msgOut = beginCell()
             .storeUint(0x10, 6)
             .storeSlice(realAddr)
             .storeCoins(0)
@@ -39,12 +46,15 @@ contract Test {
             .storeRef(newStateInit)
             .endCell();
 
-        sendRawMessage(msg, SendRemainingValue);
+        sendRawMessage(msgOut, SendRemainingValue);
     }
 }
 
 contract Child() {
-    receive() {}
+    receive() {
+        cashback(sender());
+    }
+
     get fun myAddr(): Address {
         return myAddress();
     }

@@ -3,7 +3,7 @@ import { Blockchain, SandboxContract } from "@ton/sandbox";
 import "@ton/test-utils";
 import { Test } from "./output/sample_Test";
 import { Child } from "./output/sample_Child";
-import {SendDumpToDevWallet} from "@tondevwallet/traces"
+
 import { findTransactionRequired, flattenTransaction } from "@ton/test-utils";
 
 const calculateCellsAndBits = (
@@ -56,25 +56,26 @@ describe("contract", () => {
     it("should deploy correctly", async () => {
         // Create Sandbox and deploy contract
         blockchain = await Blockchain.create();
-		blockchain.verbosity.vmLogs = "vm_logs_verbose";
+		// blockchain.verbosity.vmLogs = "vm_logs_verbose";
         owner = await blockchain.treasury("owner");
         parentContract = blockchain.openContract(await Test.fromInit());
 		
         const deployResult = await parentContract.send(owner.getSender(), { value: toNano(1) }, {
-            $$type: "DeployChildShardA"
+            $$type: "DeployChildShardA",
+            shard: 123123n,
         });
 
         const childContract = blockchain.openContract(await Child.fromInit());
         console.log("Expected address: ", childContract.address);
         console.log("Expected address parsed: ", childContract.address.hash.toString("hex"));
-        await SendDumpToDevWallet({transactions: deployResult.transactions as any})
-        const tx = findTransactionRequired(deployResult.transactions, {
+        expect(deployResult.transactions).toHaveTransaction({
             from: parentContract.address,
             deploy: true,
         });
+        // console.log()
 
-        const realAddr = flattenTransaction(tx).to;
-        console.log("Real address: ", realAddr);
-        console.log("Real address parsed: ", realAddr?.hash.toString("hex"));
+        // const realAddr = flattenTransaction(tx).to;
+        // console.log("Real address: ", realAddr);
+        // console.log("Real address parsed: ", realAddr?.hash.toString("hex"));
     });
 });
