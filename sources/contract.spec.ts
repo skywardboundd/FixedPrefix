@@ -2,10 +2,10 @@ import { Address, Cell, toNano } from "@ton/core";
 import { Blockchain, SandboxContract } from "@ton/sandbox";
 import "@ton/test-utils";
 import { Test } from "./output/sample_Test";
-import { Child } from "./output/sample_Child";
 
 import { findTransactionRequired, flattenTransaction } from "@ton/test-utils";
 import { FirstChild } from "./output/sample_FirstChild";
+import { SecondChild } from "./output/sample_SecondChild";
 
 const calculateCellsAndBits = (
     root: Cell,
@@ -60,20 +60,40 @@ describe("contract", () => {
 		// blockchain.verbosity.vmLogs = "vm_logs_verbose";
         owner = await blockchain.treasury("owner");
         parentContract = blockchain.openContract(await Test.fromInit());
+
+        // blockchain.verbosity.blockchainLogs = true;
         
-        const deployTypes = ["DeployFirstChild", "DeploySecondChild"] as const;
-        for (const element of deployTypes) {
-            try { 
-                const deployResult = await parentContract.send(owner.getSender(), { value: toNano(1) }, {
-                    $$type: element,
-                    shard: 123123n,
-                });
-                console.log(element, "without errors");
-            } catch(_e) {
-                console.log(element, "Some error ( Invalid Address )");
-            }
-        }
+        const shard = 123123n;
         
+        const deployResult = await parentContract.send(owner.getSender(), { value: toNano(1) }, {
+            $$type: "DeploySecondChild",
+            shard: 123123n,
+        });
+
+        const secondChild = blockchain.openContract(SecondChild.fromAddress(await parentContract.getGetSecondChildAddress(shard)))
+        console.log(secondChild.address);
+
+        expect(deployResult.transactions).toHaveTransaction({
+            from: parentContract.address,
+            deploy: true,
+            to: secondChild.address,
+        });
+
+        console.log("balance after deploy:", (await blockchain.getContract(secondChild.address)).balance)
+
+        const refundResult = await secondChild.send(owner.getSender(), { value: toNano(1) }, {
+            $$type: "Refund"
+        });
+        
+
+        expect(refundResult.transactions).not.toHaveTransaction({
+            success: false
+        });
+
+        console.log("Balance after refund", (await blockchain.getContract(secondChild.address)).balance)
+
+        console.log("counter:", await secondChild.getGetCounter())
+
         // const childContract = blockchain.openContract(await FirstChild.fromInit());
         // console.log("Expected address: ", childContract.address);
         // console.log("Expected address parsed: ", childContract.address.hash.toString("hex"));
